@@ -1,0 +1,136 @@
+#include <Adafruit_CircuitPlayground.h>
+
+// Constants
+const int highTone = 1000; // Frequency of high tone in Hz
+const int lowTone = 500; // Frequency of low tone in Hz
+const int buttonLeft = 4; // Pin for left button
+const int buttonRight = 19; // Pin for right button
+const int maxNeopixels = 10; // Number of neopixels
+const int initialDelay = 1000; // Initial delay in milliseconds
+const int delayDecrement = 50; // Amount to decrease delay by after each correct answer
+const int debounceDelay = 50; // Debounce delay in milliseconds
+
+int currentNeopixels = 0; // Number of lit neopixels
+int delayTime = initialDelay; // Current delay time
+
+volatile bool leftButtonPressed = false;
+volatile bool rightButtonPressed = false;
+unsigned long lastDebounceTimeLeft = 0; // Timestamp for last left button press
+unsigned long lastDebounceTimeRight = 0; // Timestamp for last right button press
+
+void setup() {
+  CircuitPlayground.begin();
+  Serial.begin(9600);
+
+  // Initialize neopixels
+  for (int i = 0; i < maxNeopixels; i++) {
+    CircuitPlayground.strip.setPixelColor(i, 0, 0, 0); // Turn off all neopixels
+  }
+  CircuitPlayground.strip.show();
+
+  // Set up interrupts
+  attachInterrupt(digitalPinToInterrupt(buttonLeft), handleLeftButtonPress, FALLING);
+  attachInterrupt(digitalPinToInterrupt(buttonRight), handleRightButtonPress, FALLING);
+}
+
+void loop() {
+  int toneType = random(0, 2); //  choose between 0 (low) and 1 (high)
+  if (toneType == 0) {
+    CircuitPlayground.playTone(lowTone, 500); // Play low tone
+  } else {
+    CircuitPlayground.playTone(highTone, 500); // Play high tone
+  }
+
+  delay(500); // Wait for a short time
+
+  unsigned long startTime = millis();
+  while ((millis() - startTime) < delayTime) {
+    if (leftButtonPressed) {
+      if (debounceLeftButton() && toneType == 0) {
+        correctAnswer();
+      } else {
+        incorrectAnswer();
+      }
+      leftButtonPressed = false;
+      return;
+    } else if (rightButtonPressed) {
+      if (debounceRightButton() && toneType == 1) {
+        correctAnswer();
+      } else {
+        incorrectAnswer();
+      }
+      rightButtonPressed = false;
+      return;
+    }
+  }
+
+  // If no button is pressed in the allowed time, restart the game
+  incorrectAnswer();
+}
+
+void handleLeftButtonPress() {
+  leftButtonPressed = true;
+}
+
+void handleRightButtonPress() {
+  rightButtonPressed = true;
+}
+
+bool debounceLeftButton() {
+  unsigned long currentTime = millis();
+  if ((currentTime - lastDebounceTimeLeft) > debounceDelay) {
+    lastDebounceTimeLeft = currentTime;
+    return true;
+  }
+  return false;
+}
+
+bool debounceRightButton() {
+  unsigned long currentTime = millis();
+  if ((currentTime - lastDebounceTimeRight) > debounceDelay) {
+    lastDebounceTimeRight = currentTime;
+    return true;
+  }
+  return false;
+}
+
+void correctAnswer() {
+  CircuitPlayground.strip.setPixelColor(currentNeopixels, 0, 255, 0); // Turn on current neopixel in green
+  CircuitPlayground.strip.show();
+  currentNeopixels++;
+  delayTime = max(100, delayTime - delayDecrement); // Speed up the game
+
+  if (currentNeopixels == maxNeopixels) {
+    playWinningTune();
+    resetGame();
+  }
+}
+
+void incorrectAnswer() {
+  resetGame();
+}
+
+void playWinningTune() {
+  // Play a short tune
+  CircuitPlayground.playTone(262, 250); // C
+  delay(250);
+  CircuitPlayground.playTone(294, 250); // D
+  delay(250);
+  CircuitPlayground.playTone(330, 250); // E
+  delay(250);
+  CircuitPlayground.playTone(349, 250); // F
+  delay(250);
+  CircuitPlayground.playTone(392, 250); // Gs
+}
+
+void resetGame() {
+  currentNeopixels = 0;
+  delayTime = initialDelay;
+
+  // Turn off all neopixels
+  for (int i = 0; i < maxNeopixels; i++) {
+    CircuitPlayground.strip.setPixelColor(i, 0, 0, 0);
+  }
+  CircuitPlayground.strip.show();
+  delay(1000);
+}
